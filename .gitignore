@@ -1,0 +1,14 @@
+# project
+.env
+
+# frontend
+node_modules
+package-lock.json
+dist
+
+# infrastructure
+.terraform
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+cdk.out
