@@ -7,11 +7,15 @@ import { Construct } from 'constructs';
 
 export interface S3StackProps extends cdk.StackProps {
   bucketName: string;
-  vpcId?: string;
-  privateSubnetId?: string;
+  vpcConfig: {
+    vpcId: string;
+    vpcCidrBlock: string;
+    subnetId: string;
+    subnetCidrBlock: string;
+  }
 }
 
-export class S3Stack extends cdk.Stack {
+export class AppStack extends cdk.Stack {
   public readonly bucket: s3.Bucket;
   public readonly distribution: cloudfront.Distribution;
 
