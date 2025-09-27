@@ -146,5 +146,3 @@ if (-not $SkipFrontend) {
 } else {
     Write-Host "Skipping frontend deployment" -ForegroundColor Yellow
 }
-
-#Write-Host "Deployment completed successfully!" -ForegroundColor Green
