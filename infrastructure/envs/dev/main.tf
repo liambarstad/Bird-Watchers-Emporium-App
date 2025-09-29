@@ -11,15 +11,26 @@ module "network" {
     az_count    = 1 
 }
 
-/*module "backend" {
-    source = "../../modules/backend"
-    vpc_id              = module.network.vpc_id
-    private_subnet_ids  = module.network.private_subnet_ids
-    create_nat          = true
-}
-
 module "frontend" {
     source = "../../modules/frontend"
-    # pass API url to inject into site build or CF header if needed
-    api_base_url = module.backend.api_invoke_url
-}*/
+    aws_region = local.aws_region
+    environment = local.environment
+    base_url = "https://bwe.dev.liambarstad.com"
+}
+
+module "backend" {
+    source      = "../../modules/backend"
+    aws_region  = local.aws_region
+    environment = local.environment
+    instance_type = "t3.micro"   
+    frontend_base_url = module.frontend.base_url
+    backend_port = 8000
+    ecr_repository_uri = aws_ecr_repository.backend_repo.repository_url
+
+    private_app_subnet_ids = module.network.private_app_subnet_ids
+    private_app_security_group_name = module.network.private_app_security_group_name
+
+    data_subnet_ids = module.network.data_subnet_ids
+    data_security_group_name = module.network.data_security_group_name
+}
+
