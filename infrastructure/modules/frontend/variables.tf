@@ -8,7 +8,7 @@ variable "environment" {
     type = string
 }
 
-variable "base_url" {
+variable "frontend_base_url" {
     description = "Base URL of the frontend application"
     type = string
 }

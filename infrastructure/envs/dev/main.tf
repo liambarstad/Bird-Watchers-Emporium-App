@@ -1,6 +1,8 @@
 locals {
     aws_region  = "us-east-1"
     environment = "dev"
+    frontend_base_url = "https://bwe.${local.environment}.liambarstad.com"
+    backend_base_url = "https://bwe-api.${local.environment}.liambarstad.com"
 }
 
 module "network" {
@@ -15,7 +17,7 @@ module "frontend" {
     source = "../../modules/frontend"
     aws_region = local.aws_region
     environment = local.environment
-    base_url = "https://bwe.dev.liambarstad.com"
+    frontend_base_url = local.frontend_base_url
 }
 
 module "backend" {
@@ -23,7 +25,8 @@ module "backend" {
     aws_region  = local.aws_region
     environment = local.environment
     instance_type = "t3.micro"   
-    frontend_base_url = module.frontend.base_url
+    frontend_base_url = local.frontend_base_url
+    backend_base_url = local.backend_base_url
     backend_port = 8000
     ecr_repository_uri = aws_ecr_repository.backend_repo.repository_url
 

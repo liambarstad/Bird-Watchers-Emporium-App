@@ -15,7 +15,12 @@ variable "instance_type" {
 }
 
 variable "frontend_base_url" {
-    description = "Base URL of the frontend application"
+    description = "Base URL of the application"
+    type = string
+}
+
+variable "backend_base_url" {
+    description = "Base URL of the backend application"
     type = string
 }
 

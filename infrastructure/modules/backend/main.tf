@@ -28,6 +28,44 @@ resource "aws_apigatewayv2_stage" "prod" {
     auto_deploy = true
 }
 
+// ------------- Custom Domain Setup ---------------
+
+# ACM Certificate for the custom domain
+resource "aws_acm_certificate" "api_certificate" {
+    domain_name       = local.backend_domain_name
+    validation_method = "DNS"
+
+    lifecycle {
+        create_before_destroy = true
+    }
+
+    tags = {
+        Name = "bwe-api-certificate-${var.environment}"
+    }
+}
+
+# Certificate validation (manual DNS records required)
+resource "aws_acm_certificate_validation" "api_certificate" {
+    certificate_arn = aws_acm_certificate.api_certificate.arn
+}
+
+# API Gateway Domain Name
+resource "aws_apigatewayv2_domain_name" "api_domain" {
+    domain_name = local.backend_domain_name
+    domain_name_configuration {
+        certificate_arn = aws_acm_certificate_validation.api_certificate.certificate_arn
+        endpoint_type   = "REGIONAL"
+        security_policy = "TLS_1_2"
+    }
+}
+
+# API Gateway Domain Mapping
+resource "aws_apigatewayv2_api_mapping" "api_mapping" {
+    api_id      = aws_apigatewayv2_api.api.id
+    domain_name = aws_apigatewayv2_domain_name.api_domain.id
+    stage       = aws_apigatewayv2_stage.prod.id
+}
+
 // ------------- EC2 Instance Setup ---------------
 
 resource "aws_iam_role" "backend_role" {
