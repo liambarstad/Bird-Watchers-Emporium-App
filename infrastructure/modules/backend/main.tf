@@ -13,13 +13,62 @@ provider "aws" {
     profile = "dev"
 }
 
+// ------------- ECR Repository Setup ---------------
+
+resource "aws_ecr_repository" "backend_repo" {
+    name                 = "bird-watchers-backend-${var.environment}"
+    image_tag_mutability = "MUTABLE"
+    
+    image_scanning_configuration {
+        scan_on_push = true
+    }
+    
+    tags = {
+        Name        = "bwe-backend-ecr-${var.environment}"
+        Environment = var.environment
+        Project     = "BWE"
+    }
+}
+
+resource "aws_ecr_lifecycle_policy" "backend_policy" {
+    repository = aws_ecr_repository.backend_repo.name
+    
+    policy = jsonencode({
+        rules = [{
+            rulePriority = 1
+            description  = "Keep last 10 images"
+            selection = {
+                tagStatus     = "tagged"
+                tagPrefixList = ["v"]
+                countType     = "imageCountMoreThan"
+                countNumber   = 10
+            }
+            action = {
+                type = "expire"
+            }
+        }]
+    })
+}
+
 // ------------- Define API Gateway ---------------
 
-resource "api_gatewayv2_api" "api" {
+resource "aws_apigatewayv2_api" "api" {
     name          = "${local.resource_tag}-api"
     description   = "Bird Watchers Emporium ${var.environment} API"
     protocol_type = "HTTP"
     version       = "1.0.0"
+
+    cors_configuration {
+        allow_origins = [var.frontend_base_url]
+        allow_methods = ["POST"]
+        allow_headers = ["content-type", "authorization", "x-api-key", "x-amz-date", "x-amz-security-token"]
+        max_age       = 3600
+    }
+    
+    tags = {
+        Env = var.environment
+        Project = "BWE"
+    }
 }
 
 resource "aws_apigatewayv2_stage" "prod" {
@@ -41,6 +90,8 @@ resource "aws_acm_certificate" "api_certificate" {
 
     tags = {
         Name = "bwe-api-certificate-${var.environment}"
+        Env = var.environment
+        Project = "BWE"
     }
 }
 
@@ -116,8 +167,8 @@ resource "aws_iam_instance_profile" "backend_instance_profile" {
 resource "aws_instance" "backend_box" {
     ami           = data.aws_ami.ubuntu.id
     instance_type = var.instance_type
-    subnet_id = var.data_subnet_ids[0]
-    security_groups = [var.data_security_group_name]
+    subnet_id = values(var.data_subnet_ids)[0]
+    vpc_security_group_ids = [var.data_security_group_id]
     iam_instance_profile = aws_iam_instance_profile.backend_instance_profile.name
 
     user_data = base64encode(templatefile("${path.module}/user-data.sh", {
@@ -129,32 +180,22 @@ resource "aws_instance" "backend_box" {
 
     tags = {
         Name = "bwe-backend-${var.environment}"
+        Env = var.environment
+        Project = "BWE"
     }
 }
 
 // ------------- Attach API Gateway to EC2 Instance on /query ---------------
 
-module "query_route" {
-    source = "./api-route"
-    
-    api_id             = aws_apigatewayv2_api.api.id
-    route_path         = "/query"
-    http_method        = "POST"
-    integration_type   = "HTTP_PROXY"
+resource "aws_apigatewayv2_integration" "query_integration" {
+    api_id           = aws_apigatewayv2_api.api.id
+    integration_type = "HTTP_PROXY"
     integration_method = "POST"
-    integration_uri    = "http://${aws_instance.backend_box.private_ip}:${var.backend_port}/query"
-    
-    cors_origin        = var.frontend_base_url
-    cors_allow_methods = ["POST", "OPTIONS"]
-    cors_allow_headers = [
-        "Content-Type",
-        "X-Amz-Date", 
-        "Authorization",
-        "X-Api-Key",
-        "X-Amz-Security-Token"
-    ]
-    
-    request_parameters = {
-        "overwrite:path" = "/query"
-    }
+    integration_uri  = "https://${aws_instance.backend_box.private_ip}:${var.backend_port}/query"
+}
+
+resource "aws_apigatewayv2_route" "post_query" {
+    api_id    = aws_apigatewayv2_api.api.id
+    route_key = "POST /query"
+    target    = "integrations/${aws_apigatewayv2_integration.query_integration.id}"
 }

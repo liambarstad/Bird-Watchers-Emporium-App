@@ -45,8 +45,8 @@ variable "data_subnet_ids" {
     type = map(string)
 }
 
-variable "data_security_group_name" {
-    description = "Name of the data security group"
+variable "data_security_group_id" {
+    description = "ID of the data security group"
     type = string
 }
 

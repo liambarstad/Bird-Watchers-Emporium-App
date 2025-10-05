@@ -38,7 +38,7 @@ output "data_cidr_blocks" {
     value       = { for k, s in aws_subnet.data : k => s.cidr_block }
 }
 
-output "data_security_group_name" {
-    description = "Name of the data security group"
-    value       = aws_security_group.data_sg.name
+output "data_security_group_id" {
+    description = "ID of the data security group"
+    value       = aws_security_group.data_sg.id
 }

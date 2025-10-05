@@ -19,12 +19,20 @@ resource "aws_vpc" "main" {
     enable_dns_hostnames = true
     enable_dns_support   = true
 
-    tags = { Name = "${local.resource_tag}-vpc" }
+    tags = { 
+        Name = "${local.resource_tag}-vpc" 
+        Env = var.environment
+        Project = "BWE"
+    }
 }
 
 resource "aws_internet_gateway" "igw" {
     vpc_id = aws_vpc.main.id
-    tags = { Name = "${local.resource_tag}-igw" }
+    tags = { 
+        Name = "${local.resource_tag}-igw" 
+        Env = var.environment
+        Project = "BWE"
+    }
 }
 
 // ------------- Public App Subnet Setup ---------------
@@ -37,6 +45,8 @@ resource "aws_subnet" "public" {
 
     tags = { 
         Name = "${local.resource_tag}-public-${element(reverse(split("-", each.value)), 0)}" 
+        Env = var.environment
+        Project = "BWE"
     }
 }
 
@@ -68,6 +78,8 @@ resource "aws_subnet" "private_app" {
 
     tags = { 
         Name = "${local.resource_tag}-private-app-${element(reverse(split("-", each.value)), 0)}" 
+        Env = var.environment
+        Project = "BWE"
     }
 }
 
@@ -117,6 +129,8 @@ resource "aws_subnet" "data" {
 
     tags = { 
         Name = "${local.resource_tag}-private-data-${element(reverse(split("-", each.value)), 0)}" 
+        Env = var.environment
+        Project = "BWE"
     }
 }
 

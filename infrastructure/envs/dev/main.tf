@@ -34,6 +34,6 @@ module "backend" {
     private_app_security_group_name = module.network.private_app_security_group_name
 
     data_subnet_ids = module.network.data_subnet_ids
-    data_security_group_name = module.network.data_security_group_name
+    data_security_group_id = module.network.data_security_group_id
 }
 
