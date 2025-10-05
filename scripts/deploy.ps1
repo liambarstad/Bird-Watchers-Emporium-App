@@ -239,14 +239,18 @@ Set-Location "../../.."
 # Stage 3: Build and push image
 Write-StageLog "Building and pushing Docker image" -Color Yellow -Stage 3
 try {
+    $Registry = $ECR_URI.split("/")[0]
     $Repository = $ECR_URI.split("/")[-1]
 
-    if (-not (Test-ECRAuth -Account $Account -Region $Region -Repository $Repository)) {
-        Invoke-CommandOrExit `
-            -Command "aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $ECR_URI" `
-            -ErrorMessage "AWS ECR login failed" `
-            -Stage 3
-    }
+    Write-StageLog "Logging into ECR Registry $Registry..." -Color Yellow -Stage 3
+    $Token = (aws ecr get-login-password --region $Region).Trim()
+
+    Invoke-CommandOrExit `
+        -Command "docker login $Registry -u AWS -p $Token" `
+        -ErrorMessage "Docker login failed" `
+        -Stage 3
+
+    Write-StageLog "Building Docker image..." -Color Yellow -Stage 3
 
     Set-Location "backend"
     Invoke-CommandOrExit `
@@ -278,7 +282,7 @@ catch {
 }
 
 # Stage 4: Deploy EC2 and application
-Write-StageLog "Deploying EC2 instance and application" -Color Yellow -Stage 4
+Write-StageLog "Deploying AWS Resources..." -Color Yellow -Stage 4
 Set-Location "infrastructure/envs/$Environment"
 
 try {
@@ -294,48 +298,40 @@ catch {
     exit 1
 }
 
+$EC2_IP = Invoke-CommandOrExit `
+    -Command "terraform output -raw ec2_private_ip" `
+    -ErrorMessage "Failed to get EC2 instance private IP" `
+    -Stage 5
+
 Set-Location "../../.."
 
 # Stage 5: Deploy application to EC2
-Write-StageLog "Deploying application to EC2..." -Color Yellow -Stage 5
+Write-StageLog "Deploying backend to EC2..." -Color Yellow -Stage 5
 try {
-    # Get EC2 instance IP from Terraform output
-    $EC2_IP = Invoke-CommandOrExit `
-        -Command "terraform output -raw ec2_public_ip" `
-        -ErrorMessage "Failed to get EC2 instance IP" `
-        -Stage 5
     
-    if ([string]::IsNullOrEmpty($EC2_IP)) {
-        Write-StageLog "Could not get EC2 instance IP" -Stage 5 -Error
-        exit 1
-    }
+    # Get the EC2 instance ID
+    $InstanceId = Invoke-CommandOrExit `
+        -Command "aws ec2 describe-instances --filters 'Name=tag:Name,Values=bwe-backend-dev' 'Name=instance-state-name,Values=running' --query 'Reservations[0].Instances[0].InstanceId' --output text --region $Region" `
+        -ErrorMessage "Failed to get EC2 instance ID" `
+        -Stage 5
 
-    # SSH into instance and pull latest image
-    $SSHCommand = @"
-aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $RegistryName
+    Write-StageLog "Instance ID: $InstanceId" -Color Cyan -Stage 5
+    Write-StageLog "Sending SSM command to instance..." -Color Yellow -Stage 5
 
-docker stop bird-watchers-backend || true
-docker rm bird-watchers-backend || true
+    $Commands = @(
+        "aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $RegistryName",
+        "docker stop bird-watchers-backend 2>/dev/null || true",
+        "docker rm bird-watchers-backend 2>/dev/null || true", 
+        "docker pull $ECR_URI`:latest",
+        "systemctl restart bird-watchers-backend.service",
+        "sleep 5",
+        "if docker ps | grep -q bird-watchers-backend; then echo 'Backend container is running'; docker logs --tail 20 bird-watchers-backend; else echo 'Failed to start backend container'; docker logs bird-watchers-backend 2>/dev/null || true; exit 1; fi"
+    )
 
-docker pull $ECR_URI`:latest
-
-systemctl restart bird-watchers-backend.service
-
-sleep 5
-if docker ps | grep -q bird-watchers-backend; then
-    echo "Backend container is running"
-    docker logs --tail 20 bird-watchers-backend
-else
-    echo "Failed to start backend container"
-    docker logs bird-watchers-backend || true
-    exit 1
-fi
-"@
-
-    # Execute SSH command
+    $CmdsJson = $Commands | ConvertTo-Json -Compress
     Invoke-CommandOrExit `
-        -Command "ssh -o StrictHostKeyChecking=no ubuntu@$EC2_IP `"$SSHCommand`"" `
-        -ErrorMessage "SSH deployment failed" `
+        -Command "aws ssm send-command --instance-ids $InstanceId --document-name AWS-RunShellScript --parameters `"commands=$CmdsJson`" --region $Region" `
+        -ErrorMessage "SSM command failed" `
         -Stage 5
 
     Write-StageLog "Application deployed to EC2 successfully" -Stage 5 -Success
@@ -359,17 +355,26 @@ try {
         -ErrorMessage "Failed to get CloudFront distribution ID" `
         -Stage 6
     
-    if ([string]::IsNullOrEmpty($FrontendS3Bucket) -or [string]::IsNullOrEmpty($CloudFrontDistributionId)) {
-        Write-StageLog "Could not get frontend S3 bucket or CloudFront distribution ID" -Stage 6 -Error
+    $BackendApiUrl = Invoke-CommandOrExit `
+        -Command "terraform output -raw backend_api_url" `
+        -ErrorMessage "Failed to get backend API URL" `
+        -Stage 6
+    
+    if ([string]::IsNullOrEmpty($FrontendS3Bucket) -or [string]::IsNullOrEmpty($CloudFrontDistributionId) -or [string]::IsNullOrEmpty($BackendApiUrl)) {
+        Write-StageLog "Could not get frontend S3 bucket, CloudFront distribution ID, or backend API URL" -Stage 6 -Error
         exit 1
     }
     
     Write-StageLog "Frontend S3 bucket: $FrontendS3Bucket" -Color Cyan -Stage 6
     Write-StageLog "CloudFront distribution: $CloudFrontDistributionId" -Color Cyan -Stage 6
+    Write-StageLog "Backend API URL: $BackendApiUrl" -Color Cyan -Stage 6
     
-    # Build frontend
-    Write-StageLog "Building frontend" -Color Yellow -Stage 6
+    # Build frontend with backend API URL
+    Write-StageLog "Building frontend..." -Color Yellow -Stage 6
     Set-Location "./frontend"
+
+    $env:REACT_APP_API_URL = $BackendApiUrl
+
     Invoke-CommandOrExit `
         -Command "npm run build" `
         -ErrorMessage "npm run build failed" `

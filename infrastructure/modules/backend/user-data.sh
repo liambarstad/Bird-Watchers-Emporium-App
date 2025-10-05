@@ -5,6 +5,13 @@ set -e
 apt-get update
 apt-get install -y docker.io awscli curl
 
+# Install and configure SSM Agent
+systemctl enable snapd
+systemctl start snapd
+snap install amazon-ssm-agent --classic
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
+
 # Start and enable Docker
 systemctl start docker
 systemctl enable docker

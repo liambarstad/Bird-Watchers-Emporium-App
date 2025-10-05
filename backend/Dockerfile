@@ -18,6 +18,9 @@ COPY . .
 RUN useradd -m -u 1000 flaskapp && chown -R flaskapp:flaskapp /app
 USER flaskapp
 
+# Set environment variable
+ENV ENVIRONMENT=production
+
 # Expose port
 EXPOSE 8000
 

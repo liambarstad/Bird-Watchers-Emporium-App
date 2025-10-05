@@ -23,3 +23,7 @@ data "aws_ami" "ubuntu" {
 
     owners = ["099720109477"]
 }
+
+data "aws_security_group" "private_app_sg" {
+    name = var.private_app_security_group_name
+}

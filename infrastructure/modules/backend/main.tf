@@ -167,8 +167,8 @@ resource "aws_iam_instance_profile" "backend_instance_profile" {
 resource "aws_instance" "backend_box" {
     ami           = data.aws_ami.ubuntu.id
     instance_type = var.instance_type
-    subnet_id = values(var.data_subnet_ids)[0]
-    vpc_security_group_ids = [var.data_security_group_id]
+    subnet_id = values(var.private_app_subnet_ids)[0]
+    vpc_security_group_ids = [data.aws_security_group.private_app_sg.id]
     iam_instance_profile = aws_iam_instance_profile.backend_instance_profile.name
 
     user_data = base64encode(templatefile("${path.module}/user-data.sh", {
